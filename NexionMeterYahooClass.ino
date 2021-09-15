@@ -60,13 +60,8 @@ void getQuote(String symbol, String field)
   yf.getQuote();
 
   char quote_msg[26];
-
   sprintf(quote_msg, "$%.2f($%.2f/%.2f%%)",yf.regularMarketPrice, yf.regularMarketChange, yf.regularMarketChangePercent*100);
-
-//  String quote_msg = String(yf.regularMarketPrice, 2) + " (" + 
-//      String(yf.regularMarketChange,2) + "/" +
-//      String (yf.regularMarketChangePercent,2) + ")";
-  
+ 
   myNex.writeStr(field + ".txt", quote_msg);
   
   if (yf.regularMarketChange < 0) myNex.writeNum(field + ".pco", 63488);
@@ -76,6 +71,11 @@ void getQuote(String symbol, String field)
 
 void getGraphData(String symbol, String field)
 {
+  if(myNex.readNumber("dp") != 2) {
+    Serial.println("Not on page2, skipping graph stuff.");
+    return;
+  }
+  
   char quote_msg[26];
   YahooFin yf = YahooFin(symbol);
   yf.getQuote();
@@ -90,42 +90,56 @@ void getGraphData(String symbol, String field)
   else myNex.writeNum("s0.pco0", 34784);
 
 
-//  Serial.print("Prev close: "); Serial.println(yf.regularMarketPreviousClose);
+  // Figure out scale  
+  long scaleLow = floor(min(yf.regularMarketPreviousClose, yf.regularMarketDayLow)) * 100;
+  long scaleHigh = ceil(max(yf.regularMarketPreviousClose, yf.regularMarketDayHigh)) * 100;
 
-  String pc = "add 2,1," + String(map((long)(yf.regularMarketPreviousClose*100), 33400,34800,0,255));
+  // Serial.print(scaleLow); Serial.print(" : "); Serial.println(scaleHigh);
+
+//  String pc = "add 2,1," + String(map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255));
+  char pc[18];
+  sprintf(pc, "add 2,1,%d", map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255));
   
-  Serial.print("Found points: ");Serial.println(yf.minuteDataPoints);
+  // Serial.print("Found points: ");Serial.println(yf.minuteDataPoints);
   
   int high = 0;
   int highI = 0;
   int low = 999;
   int lowI = 0;
+  int j = 0;
 
   for(int i = 0; i < yf.minuteDataPoints; i++)
   {
     
     if(yf.minuteQuotes[i] > 0) {
-//      long ival = (long)(yf.minuteQuotes[i]*100);
-      long mappedVal = map((long)(yf.minuteQuotes[i]*100), 33400,34800,0,255);
+
+      long mappedVal = map((long)(yf.minuteQuotes[i]*100), scaleLow,scaleHigh,0,255);
 
       if(mappedVal >= high) {
         high = mappedVal;
-        highI = i;
+        highI = j;
       }
 
       if(mappedVal <= low) {
         low = mappedVal;
-        lowI = i;
+        lowI = j;
       }
-      
+
       myNex.writeStr("add 2,0," + String(mappedVal));
       myNex.writeStr(pc);
+      j++;
+      
+      //Stretch the graph a bit
+      if(i % 3) {
+        myNex.writeStr("add 2,0," + String(mappedVal));
+        myNex.writeStr(pc);
+        j++;
+      }
     }
   }
 
-//  myNex.writeStr("thi.txt", String(yf.regularMarketDayHigh));
-  Serial.println(myNex.readNumber("dp"));
-  delay(7);
+//  Serial.println(myNex.readNumber("dp"));
+  delay(7); //Delay allows the transparent text to work.
 
   char controlDesc[50];
   sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", highI, 255-high-4, yf.regularMarketDayHigh);
@@ -141,11 +155,11 @@ void getGraphData(String symbol, String field)
   //myNex.writeStr("t3.txt", String(yf.regularMarketDayLow));
   //myNex.writeStr("t2.txt", String(yf.regularMarketPreviousClose));
   
-  sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", yf.minuteDataPoints, 255-map((long)(yf.regularMarketPreviousClose*100), 33400,34800,0,255), yf.regularMarketPreviousClose);
+  sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", j, 255-map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255), yf.regularMarketPreviousClose);
   myNex.writeStr(String(controlDesc));
 
   
-  myNex.writeNum("t2.y", 255-map((long)(yf.regularMarketPreviousClose*100), 33400,34800,0,255));
+  myNex.writeNum("t2.y", 255-map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255));
 
   sprintf(quote_msg, "%.2f(%.2f/%.2f%%)",yf.regularMarketPrice, yf.regularMarketChange, yf.regularMarketChangePercent*100);
   if (yf.regularMarketChange < 0) myNex.writeNum("t1.pco", 63488);
@@ -156,30 +170,23 @@ void getGraphData(String symbol, String field)
 
 }
 
-void selectSource(String channelName) {
+void selectSource(char* channelName) {
   char postParameter[80];
-  String postValue = "{\"entity_id\":\"media_player.sonos_5\", \"source\":\"" + channelName + "\"}";
-  postValue.toCharArray(postParameter, 80);
-
+  sprintf(postParameter, "{\"entity_id\":\"media_player.sonos_5\", \"source\":\"%s\"}", channelName);
+  
   restClient.setHeader(HA_TOKEN);
-
-  int statusCode = restClient.post("/api/services/media_player/select_source", postParameter);
-  Serial.println(statusCode);
+  restClient.post("/api/services/media_player/select_source", postParameter);
+  
 }
 
-void mediaControl(const char * command) {
-  char postParameter[37];
-  String postValue = "{\"entity_id\":\"media_player.sonos_5\"}";
+void mediaControl(char* command) {
   
-  
-  postValue.toCharArray(postParameter, 37);
-
-  restClient.setHeader(HA_TOKEN);
   char service[100];
-  strcat(service, "/api/services/media_player/");
-  strcat(service, command);
-  int statusCode = restClient.post(service, postParameter);
-  Serial.println(statusCode);
+  sprintf(service, "/api/services/media_player/%s", command);
+  
+  restClient.setHeader(HA_TOKEN);
+  restClient.post(service, "{\"entity_id\":\"media_player.sonos_5\"}");
+  
 }
 
 void setup() {
@@ -196,8 +203,7 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-//  Serial.println("");
-//  Serial.println("WiFi connected");
+
   Serial.print(F("IP address: "));
   Serial.println(WiFi.localIP());
 
@@ -217,7 +223,7 @@ void setup() {
     
   updateQuotes();
 
-  getGraphData("ACN", "s0");
+//  getGraphData("ACN", "s0");
 
   Serial.println("=================DONE=================");
 }
@@ -257,17 +263,13 @@ void trigger5() {   //Can be deleted. Use 00.
   mediaControl("media_play_pause");
 }
 
+// Turn office light on/off.
 void trigger1() {
   Serial.println("Trigger1!");
 
-  char postParameter[37];
-  String postValue = "{\"entity_id\":\"light.office_light\"}";
-  postValue.toCharArray(postParameter, 37);
-
   restClient.setHeader(HA_TOKEN);
-
-  int statusCode = restClient.post("/api/services/light/toggle", postParameter);
-  Serial.println(statusCode);
+  int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
+  
 }
 
 
@@ -286,6 +288,7 @@ void trigger16() {
   updateQuotes();
 }
 
+//Update stock chart
 void trigger17() {
     Serial.println("Trigger17");
     getGraphData("ACN", "s0");
