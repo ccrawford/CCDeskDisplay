@@ -6,7 +6,7 @@
 class YahooFin
 {
   public:
-    YahooFin(String symbol);
+    YahooFin(char* symbol);
     bool isMarketOpen();
     void getQuote();
     void getChart();
@@ -22,7 +22,7 @@ class YahooFin
     long lastUpdateTime;
     
   private:
-    String _symbol;
+    char* _symbol;
 };
 
 #endif

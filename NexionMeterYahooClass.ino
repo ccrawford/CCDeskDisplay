@@ -2,6 +2,9 @@
  * Nexion Control Panel.
  * Chris Crawford, September 2021
  * 
+ * This project uses and ESP32 dev board connected to an Nextion NX4832K035_011 (320x480 3.5" enhanced display)
+ * Connect the Nextion to the ESP32 second serial port (RX2 and TX2). That's it.
+ * 
  * Yahoo API info: https://www.reddit.com/r/sheets/comments/ji52uk/yahoo_finance_api_url/
  * https://www.reddit.com/r/sheets/wiki/apis/finance#wiki_multiple_lookup
  * https://stackoverflow.com/questions/44030983/yahoo-finance-url-not-working
@@ -11,7 +14,6 @@
  * https://query1.finance.yahoo.com/v10/finance/quoteSummary/ACN?modules=price
  * 
  * https://github.com/Seithan/EasyNextionLibrary
- 
  */
 
 #include <WiFi.h>
@@ -19,15 +21,12 @@
 #include <EasyNextionLibrary.h>
 #include <RestClient.h>
 #include <time.h>
-// #include "yahoo_cert.h"
 #include <ArduinoJson.h>
 #include "YahooFin.h"
-#include "CCSecrets.h" //Tokens, etc.
+#include "CCSecrets.h" //Tokens, passwords, etc.
 
 // restClient is used to make requests from the HomeAssistant server to control the Sonos.
 RestClient restClient = RestClient("192.168.1.207", 8123);
-
-
 
 EasyNex myNex(Serial2);
 
@@ -38,23 +37,34 @@ const int mqttPort = 1883;
 #define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_USE_DOUBLE 1
 
-// Size from https://arduinojson.org/v6/assistant/
-// DynamicJsonDocument doc(6144);
-
-// Long-lived bearer token generated over in HA.
-// const char* HA_TOKEN = "was rotated. Get this from HA.";
-
-
-
 const char* ssid = STASSID;
 const char* password = STAPSK;
 
-//paramters define
 
-//the definiens of hardware spi mode as follow:
-//if the IC model is known or the modules is unreadable,you can use this constructed function
+void setTime()
+{
+  time_t rawtime;
+  struct tm * timeinfo;
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+  
+  char tmStrBuf[10];
+  sprintf(tmStrBuf,"rtc%d=%d",5,timeinfo->tm_sec);
+  myNex.writeStr(tmStrBuf);
+  sprintf(tmStrBuf,"rtc%d=%d",4,timeinfo->tm_min);
+  myNex.writeStr(tmStrBuf);
+  sprintf(tmStrBuf,"rtc%d=%d",3,timeinfo->tm_hour);
+  myNex.writeStr(tmStrBuf);
+  sprintf(tmStrBuf,"rtc%d=%d",1,timeinfo->tm_mon+1);
+  myNex.writeStr(tmStrBuf);
+  sprintf(tmStrBuf,"rtc%d=%d",2,timeinfo->tm_mday);
+  myNex.writeStr(tmStrBuf);
+  sprintf(tmStrBuf,"rtc%d=%d",0,timeinfo->tm_year+1900);
+  myNex.writeStr(tmStrBuf);
+  
+}
 
-void getQuote(String symbol, String field)
+void getQuote(char* symbol, String field)
 {
   YahooFin yf = YahooFin(symbol);  
   yf.getQuote();
@@ -69,7 +79,7 @@ void getQuote(String symbol, String field)
     
 }
 
-void getGraphData(String symbol, String field)
+void updateGraph(char * symbol)
 {
   if(myNex.readNumber("dp") != 2) {
     Serial.println("Not on page2, skipping graph stuff.");
@@ -89,19 +99,13 @@ void getGraphData(String symbol, String field)
   if(yf.regularMarketChange<0) myNex.writeNum("s0.pco0", 63488);
   else myNex.writeNum("s0.pco0", 34784);
 
-
   // Figure out scale  
   long scaleLow = floor(min(yf.regularMarketPreviousClose, yf.regularMarketDayLow)) * 100;
   long scaleHigh = ceil(max(yf.regularMarketPreviousClose, yf.regularMarketDayHigh)) * 100;
 
-  // Serial.print(scaleLow); Serial.print(" : "); Serial.println(scaleHigh);
-
-//  String pc = "add 2,1," + String(map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255));
   char pc[18];
   sprintf(pc, "add 2,1,%d", map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255));
-  
-  // Serial.print("Found points: ");Serial.println(yf.minuteDataPoints);
-  
+    
   int high = 0;
   int highI = 0;
   int low = 999;
@@ -139,31 +143,24 @@ void getGraphData(String symbol, String field)
   }
 
 //  Serial.println(myNex.readNumber("dp"));
-  delay(7); //Delay allows the transparent text to work.
+  delay(40); //Delay allows the transparent text to work.
 
   char controlDesc[50];
-  sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", highI, 255-high-4, yf.regularMarketDayHigh);
+  sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", min(245,highI), 255-high-4, yf.regularMarketDayHigh);
+  myNex.writeStr(controlDesc);
+  
+  sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", min(245,lowI), 255-low+26, yf.regularMarketDayLow);
+  myNex.writeStr(controlDesc);
   
   
-  //Serial.print("new control:");  Serial.println(controlDesc);
-  myNex.writeStr(String(controlDesc));
-  
-  sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", lowI, 255-low+26, yf.regularMarketDayLow);
-  myNex.writeStr(String(controlDesc));
-  
-  //myNex.writeStr("xstr 231,1,88,30,0,59164,0,0,1,3,\"" + String(yf.regularMarketDayHigh) + "\"");
-  //myNex.writeStr("t3.txt", String(yf.regularMarketDayLow));
-  //myNex.writeStr("t2.txt", String(yf.regularMarketPreviousClose));
-  
-  sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", j, 255-map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255), yf.regularMarketPreviousClose);
-  myNex.writeStr(String(controlDesc));
+  sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", min(245,j), 255-map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255), yf.regularMarketPreviousClose);
+  myNex.writeStr(controlDesc);
 
   
-  myNex.writeNum("t2.y", 255-map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255));
-
   sprintf(quote_msg, "%.2f(%.2f/%.2f%%)",yf.regularMarketPrice, yf.regularMarketChange, yf.regularMarketChangePercent*100);
   if (yf.regularMarketChange < 0) myNex.writeNum("t1.pco", 63488);
   else myNex.writeNum("t1.pco", 34784);
+  
   myNex.writeStr("t1.txt", quote_msg);
   
   return;
@@ -193,7 +190,7 @@ void setup() {
   Serial.begin(115200);
   Serial.println(F("YahooNexionStockTicker Sep 2021"));
 
-  myNex.begin(9600);
+  myNex.begin(115200);
   
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -223,10 +220,13 @@ void setup() {
     
   updateQuotes();
 
-//  getGraphData("ACN", "s0");
+  setTime();
+  updateGraph("ACN");
 
   Serial.println("=================DONE=================");
 }
+
+
 
 void updateQuotes()
 {
@@ -269,7 +269,6 @@ void trigger1() {
 
   restClient.setHeader(HA_TOKEN);
   int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
-  
 }
 
 
@@ -291,13 +290,13 @@ void trigger16() {
 //Update stock chart
 void trigger17() {
     Serial.println("Trigger17");
-    getGraphData("ACN", "s0");
+    updateGraph("ACN");
 }
 
 unsigned long lastRefresh;
 unsigned long lastClock;
 
-time_t now;
+// time_t now;
 char strftime_buf[64];
 struct tm timeinfo;
 
@@ -308,22 +307,23 @@ void loop() {
   // Refresh every two minutes when market is open.
   if((millis() - lastRefresh) > 120000) {
     lastRefresh = millis();
+    if (!getLocalTime(&timeinfo)){
+      Serial.println("Couldn't get local time");
+    }
 
-//      Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-      
-        
-      Serial.println(timeinfo.tm_wday);
-      Serial.println(timeinfo.tm_hour);
       if((timeinfo.tm_wday > 0 && timeinfo.tm_wday < 6) && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >29)) && timeinfo.tm_hour < 15))
       {
         Serial.println("Market Open.");
+        // These functions only update page if page is active.
         updateQuotes();
+        updateGraph("ACN");
        }
       else {
         Serial.println("Market Closed.");
       }
     }
-  
+
+  /*
   if(millis() - lastClock > 1000) {
     // Serial.println(millis());
     if (!getLocalTime(&timeinfo)){
@@ -334,5 +334,6 @@ void loop() {
     }
     lastClock = millis();
   }
+  */
 
 }

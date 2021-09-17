@@ -6,7 +6,7 @@
 #include "yahoo_cert.h"
 #include <ArduinoJson.h>
 
-YahooFin::YahooFin(String symbol)
+YahooFin::YahooFin(char* symbol)
 {
   _symbol = symbol;
 }
@@ -29,8 +29,11 @@ void YahooFin::getQuote(){
   client.useHTTP10(true);
   
   DynamicJsonDocument doc(6144);
+
+  char url[80];
+  sprintf(url, "https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=price",_symbol);
     
-  client.begin("https://query1.finance.yahoo.com/v10/finance/quoteSummary/" + _symbol + "?modules=price", cert_DigiCert_SHA2_High_Assurance_Server_CA);
+  client.begin(url, cert_DigiCert_SHA2_High_Assurance_Server_CA);
   int httpCode = client.GET();
 
   if (httpCode > 0) {
@@ -65,8 +68,10 @@ void YahooFin::getChart(){
    
    StaticJsonDocument<112> filter;
    filter["chart"]["result"][0]["indicators"]["quote"][0]["close"] = true;
-    
-   client.begin("https://query1.finance.yahoo.com/v8/finance/chart/" + _symbol + "?interval=2m", cert_DigiCert_SHA2_High_Assurance_Server_CA);
+
+   char url[80];
+   sprintf(url, "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=2m",_symbol); 
+   client.begin(url, cert_DigiCert_SHA2_High_Assurance_Server_CA);
    int httpCode = client.GET();
 
    if (httpCode > 0) {
