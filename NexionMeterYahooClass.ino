@@ -41,6 +41,7 @@ const char* ssid = STASSID;
 const char* password = STAPSK;
 
 
+// Update the RTC in the Nextion. Actual time dispaly handled over there. 
 void setTime()
 {
   time_t rawtime;
@@ -85,11 +86,22 @@ void updateGraph(char * symbol)
     Serial.println("Not on page2, skipping graph stuff.");
     return;
   }
-  
+
+  // Update the detailed quote on page.
   char quote_msg[26];
   YahooFin yf = YahooFin(symbol);
   yf.getQuote();
+
+  sprintf(quote_msg, "%.2f(%.2f/%.2f%%)",yf.regularMarketPrice, yf.regularMarketChange, yf.regularMarketChangePercent*100);
+  if (yf.regularMarketChange < 0) myNex.writeNum("t1.pco", 63488);
+  else myNex.writeNum("t1.pco", 34784);
+  
+  myNex.writeStr("t1.txt", quote_msg);
+
+  // Update the chart
   yf.getChart();
+
+  if (yf.minuteDataPoints == 0) return;
 
   // Clear the graph...we can think about adding on to it later. 
   myNex.writeStr("cle 2,0");
@@ -103,7 +115,7 @@ void updateGraph(char * symbol)
   long scaleLow = floor(min(yf.regularMarketPreviousClose, yf.regularMarketDayLow)) * 100;
   long scaleHigh = ceil(max(yf.regularMarketPreviousClose, yf.regularMarketDayHigh)) * 100;
 
-  char pc[18];
+  char pc[18];  // pc is the previous close amount for the line.
   sprintf(pc, "add 2,1,%d", map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255));
     
   int high = 0;
@@ -142,27 +154,20 @@ void updateGraph(char * symbol)
     }
   }
 
-//  Serial.println(myNex.readNumber("dp"));
-  delay(40); //Delay allows the transparent text to work.
+  // Update the min/max/last overlay
 
+  delay(40); //Delay allows the transparent text to work.
+  
   char controlDesc[50];
   sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", min(245,highI), 255-high-4, yf.regularMarketDayHigh);
   myNex.writeStr(controlDesc);
   
   sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", min(245,lowI), 255-low+26, yf.regularMarketDayLow);
   myNex.writeStr(controlDesc);
-  
-  
+    
   sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", min(245,j), 255-map((long)(yf.regularMarketPreviousClose*100), scaleLow,scaleHigh,0,255), yf.regularMarketPreviousClose);
   myNex.writeStr(controlDesc);
 
-  
-  sprintf(quote_msg, "%.2f(%.2f/%.2f%%)",yf.regularMarketPrice, yf.regularMarketChange, yf.regularMarketChangePercent*100);
-  if (yf.regularMarketChange < 0) myNex.writeNum("t1.pco", 63488);
-  else myNex.writeNum("t1.pco", 34784);
-  
-  myNex.writeStr("t1.txt", quote_msg);
-  
   return;
 
 }
@@ -217,10 +222,10 @@ void setup() {
 
   struct tm timeinfo;
   gmtime_r(&now, &timeinfo);
-    
+  setTime();    
+  
   updateQuotes();
 
-  setTime();
   updateGraph("ACN");
 
   Serial.println("=================DONE=================");
@@ -244,28 +249,28 @@ void updateQuotes()
 }
 
 void trigger0() {
-  Serial.println("Trigger0!");
+//  Serial.println("Trigger0!");
   mediaControl("media_play_pause");
 }
 
 void trigger4() {
-  Serial.println("Trigger4!");
+//  Serial.println("Trigger4!");
   mediaControl("volume_up");
 }
 
 void trigger3() {
-  Serial.println("Trigger3!");
+//  Serial.println("Trigger3!");
   mediaControl("volume_down");
 }
 
 void trigger5() {   //Can be deleted. Use 00.
-  Serial.println("Trigger5!");
+//  Serial.println("Trigger5!");
   mediaControl("media_play_pause");
 }
 
 // Turn office light on/off.
 void trigger1() {
-  Serial.println("Trigger1!");
+//  Serial.println("Trigger1!");
 
   restClient.setHeader(HA_TOKEN);
   int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
@@ -273,30 +278,29 @@ void trigger1() {
 
 
 void trigger2() {
-  Serial.println("Trigger2");
+//  Serial.println("Trigger2");
   selectSource("WXRT Over the Air");
 }
 
 void trigger6() {
-  Serial.println("Trigger6!");
+//  Serial.println("Trigger6!");
   selectSource("Discover Weekly");
 }
 
 void trigger16() {
-  Serial.println("Trigger10");
+//  Serial.println("Trigger10");
   updateQuotes();
 }
 
 //Update stock chart
 void trigger17() {
-    Serial.println("Trigger17");
+//    Serial.println("Trigger17");
     updateGraph("ACN");
 }
 
 unsigned long lastRefresh;
 unsigned long lastClock;
 
-// time_t now;
 char strftime_buf[64];
 struct tm timeinfo;
 
@@ -307,33 +311,18 @@ void loop() {
   // Refresh every two minutes when market is open.
   if((millis() - lastRefresh) > 120000) {
     lastRefresh = millis();
-    if (!getLocalTime(&timeinfo)){
-      Serial.println("Couldn't get local time");
-    }
-
-      if((timeinfo.tm_wday > 0 && timeinfo.tm_wday < 6) && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >29)) && timeinfo.tm_hour < 15))
-      {
-        Serial.println("Market Open.");
-        // These functions only update page if page is active.
-        updateQuotes();
-        updateGraph("ACN");
-       }
-      else {
-        Serial.println("Market Closed.");
-      }
-    }
-
-  /*
-  if(millis() - lastClock > 1000) {
-    // Serial.println(millis());
-    if (!getLocalTime(&timeinfo)){
-      Serial.println("Couldn't get local time");
-    }
+    if (!getLocalTime(&timeinfo)) Serial.println("Couldn't get local time");
+    
+    if((timeinfo.tm_wday > 0 && timeinfo.tm_wday < 6) && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >29)) && timeinfo.tm_hour < 15))
+    {
+      Serial.println("Market Open.");
+      // These functions only update page if page is active.
+      updateQuotes();
+      updateGraph("ACN");
+     }
     else {
-      myNex.writeStr("t6.txt",asctime(&timeinfo));
+      Serial.println("Market Closed.");
     }
-    lastClock = millis();
   }
-  */
 
 }
