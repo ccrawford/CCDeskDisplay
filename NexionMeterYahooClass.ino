@@ -253,14 +253,23 @@ void trigger0() {
   mediaControl("media_play_pause");
 }
 
-void trigger4() {
-//  Serial.println("Trigger4!");
-  mediaControl("volume_up");
+// Turn office light on/off.
+void trigger1() {
+  restClient.setHeader(HA_TOKEN);
+  int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
+}
+
+void trigger2() {
+  selectSource("WXRT Over the Air");
 }
 
 void trigger3() {
-//  Serial.println("Trigger3!");
   mediaControl("volume_down");
+}
+
+void trigger4() {
+//  Serial.println("Trigger4!");
+  mediaControl("volume_up");
 }
 
 void trigger5() {   //Can be deleted. Use 00.
@@ -268,33 +277,38 @@ void trigger5() {   //Can be deleted. Use 00.
   mediaControl("media_play_pause");
 }
 
-// Turn office light on/off.
-void trigger1() {
-//  Serial.println("Trigger1!");
-
-  restClient.setHeader(HA_TOKEN);
-  int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
-}
-
-
-void trigger2() {
-//  Serial.println("Trigger2");
-  selectSource("WXRT Over the Air");
-}
-
 void trigger6() {
-//  Serial.println("Trigger6!");
   selectSource("Discover Weekly");
 }
 
+void trigger7() {
+  selectSource("Daily Mix 1");
+}
+
+void trigger8() {
+  selectSource("Daily Mix 2");
+}
+
+void trigger9() {
+  selectSource("Daily Mix 3");
+}
+
+void trigger10() {
+  selectSource("Daily Mix 4");
+}
+void trigger11() {
+  selectSource("Daily Mix 5");
+}
+void trigger12() {
+  selectSource("Daily Mix 6");
+}
+
+
 void trigger16() {
-//  Serial.println("Trigger10");
   updateQuotes();
 }
 
-//Update stock chart
 void trigger17() {
-//    Serial.println("Trigger17");
     updateGraph("ACN");
 }
 
