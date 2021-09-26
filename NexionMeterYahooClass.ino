@@ -9,11 +9,19 @@
  * https://www.reddit.com/r/sheets/wiki/apis/finance#wiki_multiple_lookup
  * https://stackoverflow.com/questions/44030983/yahoo-finance-url-not-working
  * 
+ * Test stock API calls:
  * URLS: https://query1.finance.yahoo.com/v8/finance/chart/ACN?interval=2m
  * https://query1.finance.yahoo.com/v7/finance/quote?lang=en-US&region=US&corsDomain=finance.yahoo.com&symbols=ACN,^GSPC,^IXIC
  * https://query1.finance.yahoo.com/v10/finance/quoteSummary/ACN?modules=price
  * 
+ * Libraries:
  * https://github.com/Seithan/EasyNextionLibrary
+ * https://www.flaticon.com/packs/music-and-video-app-4
+ * https://github.com/knolleary/pubsubclient
+ * 
+ * Supporting technology:
+ * https://github.com/TroyFernandes/hass-mqtt-mediaplayer
+ * 
  */
 
 #include <WiFi.h>
@@ -22,6 +30,7 @@
 #include <RestClient.h>
 #include <time.h>
 #include <ArduinoJson.h>
+#include <PubSubClient.h>
 #include "YahooFin.h"
 #include "CCSecrets.h" //Tokens, passwords, etc.
 
@@ -31,14 +40,83 @@ RestClient restClient = RestClient("192.168.1.207", 8123);
 EasyNex myNex(Serial2);
 
 // MQTT not yet hooked up.
-const char* mqttServer = "192.168.1.207";
-const int mqttPort = 1883;
+const char* mqtt_server = "192.168.1.207";
+WiFiClient (espClient);
+PubSubClient client(espClient);
 
 #define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_USE_DOUBLE 1
 
 const char* ssid = STASSID;
 const char* password = STAPSK;
+
+
+// MQTT callback for media message
+void callback(char* topic, byte* payload, unsigned int length) {
+
+  if(myNex.readNumber("dp") != 3) {
+    Serial.println("Not on page3, skipping updating media player info.");
+    return;
+  }
+
+//  char quote_msg[26];
+//  sprintf(quote_msg, "$%.2f($%.2f/%.2f%%)",yf.regularMarketPrice, yf.regularMarketChange, yf.regularMarketChangePercent*100);
+ 
+//  myNex.writeStr(field + ".txt", quote_msg);
+  
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+
+  if(!strcmp(topic, "homeassistant/media_player/volume")) {
+    Serial.print("Volume: "); 
+  }
+
+
+  if(!strcmp(topic, "homeassistant/media_player/track")) {
+    if (length>100) length=100;
+    char track[101];
+    strncpy(track, (char *)payload, length);
+    track[length] = 0;
+    Serial.print("track: "); Serial.println(track);
+    myNex.writeStr("t0.txt", track);
+  }
+  if(!strcmp(topic, "homeassistant/media_player/state")) {
+    Serial.print("State: "); 
+  }
+  if(!strcmp(topic, "homeassistant/media_player/artist")) {
+    if (length>100) length=100;
+    char artist[101];
+    strncpy(artist, (char *)payload, length);
+    artist[length] = 0;
+    Serial.print("Artist: "); Serial.println(artist);
+    myNex.writeStr("t1.txt", artist);
+  }
+ 
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    
+    if (client.connect("DesktopBuddy","hass.mqtt","trixie*1")) {
+      Serial.println("connected");
+      client.subscribe("homeassistant/media_player/#");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
 
 
 // Update the RTC in the Nextion. Actual time dispaly handled over there. 
@@ -182,6 +260,8 @@ void selectSource(char* channelName) {
 }
 
 void mediaControl(char* command) {
+
+  // See: https://www.home-assistant.io/integrations/media_player
   
   char service[100];
   sprintf(service, "/api/services/media_player/%s", command);
@@ -223,9 +303,13 @@ void setup() {
   struct tm timeinfo;
   gmtime_r(&now, &timeinfo);
   setTime();    
-  
-  updateQuotes();
 
+  // Setup MQTT
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+
+  // Update quote info
+  updateQuotes();
   updateGraph("ACN");
 
   Serial.println("=================DONE=================");
@@ -239,17 +323,16 @@ void updateQuotes()
     Serial.println("Not on page0, skipping.");
     return;
   }
-  myNex.writeStr("t6.txt","updating.");
+  myNex.writeStr("t7.txt","updating.");
   getQuote("ACN", "t1");
-  myNex.writeStr("t6.txt","updating .");
+  myNex.writeStr("t7.txt","updating .");
   getQuote("^GSPC", "t4");        
-  myNex.writeStr("t6.txt","updating  .");
+  myNex.writeStr("t7.txt","updating  .");
   getQuote("^IXIC", "t5");
-  myNex.writeStr("t6.txt","");
+  myNex.writeStr("t7.txt","");
 }
 
 void trigger0() {
-//  Serial.println("Trigger0!");
   mediaControl("media_play_pause");
 }
 
@@ -268,13 +351,7 @@ void trigger3() {
 }
 
 void trigger4() {
-//  Serial.println("Trigger4!");
   mediaControl("volume_up");
-}
-
-void trigger5() {   //Can be deleted. Use 00.
-//  Serial.println("Trigger5!");
-  mediaControl("media_play_pause");
 }
 
 void trigger6() {
@@ -302,6 +379,12 @@ void trigger11() {
 void trigger12() {
   selectSource("Daily Mix 6");
 }
+void trigger13() {
+  mediaControl("media_next_track");
+}
+void trigger14() {
+  selectSource("media_previous_track");
+}
 
 
 void trigger16() {
@@ -321,6 +404,14 @@ struct tm timeinfo;
 void loop() {
   
   myNex.NextionListen();
+
+  // Do MQTT checks
+  if (!client.connected()) {
+    Serial.println("reconnecting...");
+    reconnect();
+  }
+  client.loop();
+
 
   // Refresh every two minutes when market is open.
   if((millis() - lastRefresh) > 120000) {
