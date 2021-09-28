@@ -50,11 +50,16 @@ PubSubClient client(espClient);
 const char* ssid = STASSID;
 const char* password = STAPSK;
 
+char playerState[20];
+int trackDuration;
+int trackPosition;
+
+
 
 // MQTT callback for media message
 void callback(char* topic, byte* payload, unsigned int length) {
-
-  if(myNex.readNumber("dp") != 3) {
+  Serial.println("In callback");
+  if(myNex.currentPageId != 3) {
     Serial.println("Not on page3, skipping updating media player info.");
     return;
   }
@@ -64,48 +69,115 @@ void callback(char* topic, byte* payload, unsigned int length) {
  
 //  myNex.writeStr(field + ".txt", quote_msg);
   
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
+  Serial.print("Message arrived ["); Serial.print(topic); Serial.print("] ");
 
   if(!strcmp(topic, "homeassistant/media_player/volume")) {
     Serial.print("Volume: "); 
+    char bufVol[6];
+    strncpy(bufVol, (char *)payload, length);
+    bufVol[length] = 0;
+    int vol = atof(bufVol)*100;
+    Serial.println(vol);
+    myNex.writeNum("j1.val", vol);
   }
-
 
   if(!strcmp(topic, "homeassistant/media_player/track")) {
     if (length>100) length=100;
     char track[101];
     strncpy(track, (char *)payload, length);
     track[length] = 0;
-    Serial.print("track: "); Serial.println(track);
+   // Serial.print("track: "); Serial.println(track);
     myNex.writeStr("t0.txt", track);
   }
   if(!strcmp(topic, "homeassistant/media_player/state")) {
-    Serial.print("State: "); 
+    char bufState[20];
+    strncpy(bufState, (char *)payload, length);
+    bufState[length]=0;
+    strcpy(playerState, bufState);
+   // Serial.print("State: "); Serial.println(playerState);
+    if(!strcmp("playing",bufState)) {
+      myNex.writeNum("tm0.en",1);
+      myNex.writeStr("vis p2,0");
+      myNex.writeStr("vis p7,1");
+    } else {
+      myNex.writeNum("tm0.en",0);
+      myNex.writeStr("vis p2,1");    
+      myNex.writeStr("vis p7,0");
+    }
   }
   if(!strcmp(topic, "homeassistant/media_player/artist")) {
     if (length>100) length=100;
     char artist[101];
     strncpy(artist, (char *)payload, length);
     artist[length] = 0;
-    Serial.print("Artist: "); Serial.println(artist);
+   // Serial.print("Artist: "); Serial.println(artist);
     myNex.writeStr("t1.txt", artist);
+  }
+  if(!strcmp(topic, "homeassistant/media_player/duration")) {
+    char duration[6];
+    strncpy(duration, (char *)payload, length);
+    duration[length] = 0;
+    trackDuration = atoi(duration);
+
+    // We'll use that timer to update the progress. Since progress is always 0-100, we need to set the timer
+    // to tick every 1% of the track. Timer is in ms. Duration in seconds. Progress bar in %. So, multiply by 1000/100=10.
+    myNex.writeNum("tm0.tim", trackDuration*10); 
+  //  Serial.print("Duration: "); Serial.println(trackDuration);
+    
+  }
+  if(!strcmp(topic, "homeassistant/media_player/position")) {
+    char bufPosition[6];
+    strncpy(bufPosition, (char *)payload, length);
+    bufPosition[length] = 0;
+    trackPosition = atoi(bufPosition);
+    Serial.print("Position: "); Serial.println(trackPosition);
+    
+  }
+
+   if(!strcmp(topic, "homeassistant/media_player/position_last_update")) {
+    int yr,mo,da,hr,mn,se;
+    struct tm timeinfo;
+    
+    char bufTime[36];
+    strncpy(bufTime, (char *)payload, length);
+    bufTime[length] = 0;
+
+    sscanf(bufTime, "%d-%d-%d %d:%d:%d\+*",&yr,&mo,&da,&hr,&mn,&se);
+    timeinfo.tm_sec = se;
+    timeinfo.tm_min = mn;
+    timeinfo.tm_hour = hr;
+    timeinfo.tm_mday = da;
+    timeinfo.tm_mon = mo-1;
+    timeinfo.tm_year = yr-1900;
+
+    time_t now;
+    time(&now);
+    int diffTime = difftime(mktime(gmtime(&now)), mktime(&timeinfo));
+    Serial.print("DiffTime: ");Serial.println(diffTime);
+
+    // If this is a new time update, then reset the time. 
+    // TODO: deal with a mid-track update...messy.
+    // Should also check position here...
+    if(diffTime<=1) {
+      int curOffset = (int)((trackPosition*100)/trackDuration); // Calculate what pct of track has been played.
+      myNex.writeNum("j0.val", curOffset);
+    }
+  
   }
  
   for (int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
-
 }
 
+
 void reconnect() {
-  // Loop until we're reconnected
+  // Loop until we're reconnected to the MQTT broker.
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     
-    if (client.connect("DesktopBuddy","hass.mqtt","trixie*1")) {
+    if (client.connect("DesktopBuddy","hass.mqtt","trixie*1",0,0,0,0,0)) {
       Serial.println("connected");
       client.subscribe("homeassistant/media_player/#");
     } else {
@@ -160,7 +232,7 @@ void getQuote(char* symbol, String field)
 
 void updateGraph(char * symbol)
 {
-  if(myNex.readNumber("dp") != 2) {
+  if(myNex.currentPageId != 2) {
     Serial.println("Not on page2, skipping graph stuff.");
     return;
   }
@@ -250,6 +322,7 @@ void updateGraph(char * symbol)
 
 }
 
+// Select the current source for Sonos. Has to be in the Sonos favorites.
 void selectSource(char* channelName) {
   char postParameter[80];
   sprintf(postParameter, "{\"entity_id\":\"media_player.sonos_5\", \"source\":\"%s\"}", channelName);
@@ -293,11 +366,11 @@ void setup() {
   configTime(-5 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
   // Serial.print("Waiting for NTP time sync: ");
-  time_t now = time(nullptr);
+  time_t now = time(NULL);
   while (now < 8 * 3600 * 2) {
     delay(500);
     Serial.print(".");
-    now = time(nullptr);
+    now = time(NULL);
   }
 
   struct tm timeinfo;
@@ -307,6 +380,10 @@ void setup() {
   // Setup MQTT
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
+
+  myNex.writeStr("page 0");
+//  myNex.lastCurrentPageId = 1;
+//  myNex.currentPageId = myNex.readNumber("dp");
 
   // Update quote info
   updateQuotes();
@@ -319,7 +396,8 @@ void setup() {
 
 void updateQuotes()
 {
-  if(myNex.readNumber("dp") != 0) {
+  Serial.print("Cur page: "); Serial.println(myNex.currentPageId);
+  if(myNex.currentPageId != 0) {
     Serial.println("Not on page0, skipping.");
     return;
   }
@@ -335,41 +413,35 @@ void updateQuotes()
 void trigger0() {
   mediaControl("media_play_pause");
 }
-
 // Turn office light on/off.
 void trigger1() {
   restClient.setHeader(HA_TOKEN);
   int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
 }
-
 void trigger2() {
   selectSource("WXRT Over the Air");
 }
-
 void trigger3() {
+  Serial.println("Vol down...");
   mediaControl("volume_down");
 }
-
 void trigger4() {
+  Serial.println("Vol up...");
   mediaControl("volume_up");
 }
 
 void trigger6() {
   selectSource("Discover Weekly");
 }
-
 void trigger7() {
   selectSource("Daily Mix 1");
 }
-
 void trigger8() {
   selectSource("Daily Mix 2");
 }
-
 void trigger9() {
   selectSource("Daily Mix 3");
 }
-
 void trigger10() {
   selectSource("Daily Mix 4");
 }
@@ -385,24 +457,21 @@ void trigger13() {
 void trigger14() {
   selectSource("media_previous_track");
 }
-
-
 void trigger16() {
   updateQuotes();
 }
-
 void trigger17() {
     updateGraph("ACN");
 }
+void trigger18() {
+  Serial.println("Update the player info, if possible.");
+}
 
 unsigned long lastRefresh;
-unsigned long lastClock;
-
-char strftime_buf[64];
-struct tm timeinfo;
 
 void loop() {
   
+  struct tm timeinfo;
   myNex.NextionListen();
 
   // Do MQTT checks
@@ -412,9 +481,15 @@ void loop() {
   }
   client.loop();
 
+  // Check player position
+  // if media state is playing and on the status page
+  // update the curent position.
+
 
   // Refresh every two minutes when market is open.
+ 
   if((millis() - lastRefresh) > 120000) {
+    
     lastRefresh = millis();
     if (!getLocalTime(&timeinfo)) Serial.println("Couldn't get local time");
     
