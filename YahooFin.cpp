@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include <time.h>
 #include "yahoo_cert.h"
+#include <ArduinoDebug.hpp>
 #include <ArduinoJson.h>
 
 YahooFin::YahooFin(char* symbol)
@@ -15,7 +16,7 @@ bool YahooFin::isMarketOpen()
 {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)){
-    Serial.println("Couldn't get local time");
+    DBG_ERROR("Couldn't get local time");
   }
   return ((timeinfo.tm_wday > 0 && timeinfo.tm_wday < 6) 
       && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >=30)) 
@@ -37,7 +38,7 @@ void YahooFin::getQuote(){
   int httpCode = client.GET();
 
   if (httpCode > 0) {
-    Serial.println(httpCode);
+    DBG_VERBOSE(httpCode);
     auto err = deserializeJson(doc, client.getStream());
     if (err) {
       Serial.println("Failed to parse response to JSON with " + String(err.c_str()));
@@ -52,7 +53,7 @@ void YahooFin::getQuote(){
     
   }
   else {
-    Serial.println("Error on HTTP request");
+    DBG_ERROR("Error on HTTP request");
   }
 
   doc.clear();
@@ -64,7 +65,7 @@ void YahooFin::getChart(){
    client.useHTTP10(true);
    
    DynamicJsonDocument doc(8192);
-   Serial.print("Doc capacity: ");Serial.println(doc.capacity());
+   DBG_DEBUG("Doc capacity: %d", doc.capacity());
    
    StaticJsonDocument<112> filter;
    filter["chart"]["result"][0]["indicators"]["quote"][0]["close"] = true;
@@ -80,7 +81,7 @@ void YahooFin::getChart(){
      client.end();
 
      if (err) {
-       Serial.println("Failed to parse response to JSON with " + String(err.c_str()));
+       DBG_ERROR("Failed to parse response to JSON with " + String(err.c_str()));
      }
      JsonArray arr = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"].as<JsonArray>();
      int i = 0;
@@ -89,14 +90,12 @@ void YahooFin::getChart(){
         if(!value.isNull()) {
           if(i>=195) continue;
           minuteQuotes[i++] = value.as<double>();
-          minuteDataPoints++;
-          
-          
+          minuteDataPoints++;          
         }
      }
   }
   else {
-    Serial.println("Error on HTTP request");
+    DBG_ERROR("Error on HTTP request");
     client.end();
   }
   doc.clear();

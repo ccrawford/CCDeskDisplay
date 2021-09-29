@@ -24,6 +24,14 @@
  * 
  */
 
+
+#define DBG_ENABLE_VERBOSE
+#define DBG_ENABLE_WARNING
+#define DBG_ENABLE_INFO
+#define DBG_ENABLE_DEBUG
+#define DBG_ENABLE_VERBOSE
+
+#include <ArduinoDebug.hpp>
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <EasyNextionLibrary.h>
@@ -33,6 +41,9 @@
 #include <PubSubClient.h>
 #include "YahooFin.h"
 #include "CCSecrets.h" //Tokens, passwords, etc.
+
+DEBUG_INSTANCE(160, Serial);
+
 
 // restClient is used to make requests from the HomeAssistant server to control the Sonos.
 RestClient restClient = RestClient("192.168.1.207", 8123);
@@ -55,12 +66,12 @@ int trackDuration;
 int trackPosition;
 
 
-
 // MQTT callback for media message
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.println("In callback");
+  DBG_DEBUG("In callback");
+  
   if(myNex.currentPageId != 3) {
-    Serial.println("Not on page3, skipping updating media player info.");
+    DBG_INFO("Not on page3, skipping updating media player info.");
     return;
   }
 
@@ -69,24 +80,23 @@ void callback(char* topic, byte* payload, unsigned int length) {
  
 //  myNex.writeStr(field + ".txt", quote_msg);
   
-  Serial.print("Message arrived ["); Serial.print(topic); Serial.print("] ");
+  DBG_INFO("Message arrived [%s]");
 
   if(!strcmp(topic, "homeassistant/media_player/volume")) {
-    Serial.print("Volume: "); 
     char bufVol[6];
     strncpy(bufVol, (char *)payload, length);
     bufVol[length] = 0;
     int vol = atof(bufVol)*100;
-    Serial.println(vol);
+    DBG_INFO("Volume: %d", vol);
     myNex.writeNum("j1.val", vol);
   }
 
   if(!strcmp(topic, "homeassistant/media_player/track")) {
     if (length>100) length=100;
-    char track[101];
+    char track[101]; 
     strncpy(track, (char *)payload, length);
     track[length] = 0;
-   // Serial.print("track: "); Serial.println(track);
+    DBG_INFO("track: %s", track);
     myNex.writeStr("t0.txt", track);
   }
   if(!strcmp(topic, "homeassistant/media_player/state")) {
@@ -94,7 +104,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     strncpy(bufState, (char *)payload, length);
     bufState[length]=0;
     strcpy(playerState, bufState);
-   // Serial.print("State: "); Serial.println(playerState);
+    DBG_INFO("State: %s", playerState);
     if(!strcmp("playing",bufState)) {
       myNex.writeNum("tm0.en",1);
       myNex.writeStr("vis p2,0");
@@ -110,7 +120,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     char artist[101];
     strncpy(artist, (char *)payload, length);
     artist[length] = 0;
-   // Serial.print("Artist: "); Serial.println(artist);
+    DBG_INFO("Artist: %s", artist);
     myNex.writeStr("t1.txt", artist);
   }
   if(!strcmp(topic, "homeassistant/media_player/duration")) {
@@ -122,7 +132,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     // We'll use that timer to update the progress. Since progress is always 0-100, we need to set the timer
     // to tick every 1% of the track. Timer is in ms. Duration in seconds. Progress bar in %. So, multiply by 1000/100=10.
     myNex.writeNum("tm0.tim", trackDuration*10); 
-  //  Serial.print("Duration: "); Serial.println(trackDuration);
+    DBG_INFO("Duration: %d",trackDuration);
     
   }
   if(!strcmp(topic, "homeassistant/media_player/position")) {
@@ -130,7 +140,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     strncpy(bufPosition, (char *)payload, length);
     bufPosition[length] = 0;
     trackPosition = atoi(bufPosition);
-    Serial.print("Position: "); Serial.println(trackPosition);
+    DBG_INFO("Position: %d", trackPosition);
     
   }
 
@@ -153,7 +163,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     time_t now;
     time(&now);
     int diffTime = difftime(mktime(gmtime(&now)), mktime(&timeinfo));
-    Serial.print("DiffTime: ");Serial.println(diffTime);
+    DBG_INFO("DiffTime: %d", diffTime);
 
     // If this is a new time update, then reset the time. 
     // TODO: deal with a mid-track update...messy.
@@ -165,25 +175,24 @@ void callback(char* topic, byte* payload, unsigned int length) {
   
   }
  
-  for (int i = 0; i < length; i++) {
+/*  for (int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
+  */
 }
 
 
 void reconnect() {
   // Loop until we're reconnected to the MQTT broker.
   while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
+    DBG_INFO("Attempting MQTT connection...");
     
     if (client.connect("DesktopBuddy","hass.mqtt","trixie*1",0,0,0,0,0)) {
-      Serial.println("connected");
+      DBG_INFO("connected");
       client.subscribe("homeassistant/media_player/#");
     } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
+      DBG_ERROR("failed to connect to MQTT, rc=%d Try again in 5 seconds");
       // Wait 5 seconds before retrying
       delay(5000);
     }
@@ -220,25 +229,25 @@ void getQuote(char* symbol, String field)
   YahooFin yf = YahooFin(symbol);  
   yf.getQuote();
 
-  char quote_msg[26];
+  char quote_msg[30];
   sprintf(quote_msg, "$%.2f($%.2f/%.2f%%)",yf.regularMarketPrice, yf.regularMarketChange, yf.regularMarketChangePercent*100);
  
   myNex.writeStr(field + ".txt", quote_msg);
   
   if (yf.regularMarketChange < 0) myNex.writeNum(field + ".pco", 63488);
   else myNex.writeNum(field + ".pco", 34784);
-    
+  
 }
 
 void updateGraph(char * symbol)
 {
   if(myNex.currentPageId != 2) {
-    Serial.println("Not on page2, skipping graph stuff.");
+    DBG_INFO("Not on page2, skipping graph stuff.");
     return;
   }
 
   // Update the detailed quote on page.
-  char quote_msg[26];
+  char quote_msg[30];
   YahooFin yf = YahooFin(symbol);
   yf.getQuote();
 
@@ -346,30 +355,30 @@ void mediaControl(char* command) {
 
 void setup() {
   Serial.begin(115200);
+  // Don't "Debug" this out. I want this to print regardless. Not time sensitive and very useful when you find an old ESP lying around.
   Serial.println(F("YahooNexionStockTicker Sep 2021"));
 
   myNex.begin(115200);
   
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
+  DBG_INFO("Connecting to %s", ssid);
+  
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    DBG_INFO(".");
   }
 
-  Serial.print(F("IP address: "));
-  Serial.println(WiFi.localIP());
+  DBG_INFO("IP address: %d:%d:%d:%d", WiFi.localIP()[0],WiFi.localIP()[1],WiFi.localIP()[2],WiFi.localIP()[3]);
 
   // Set time via NTP, as required for x.509 validation
   configTime(-5 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
-  // Serial.print("Waiting for NTP time sync: ");
+  DBG_INFO("Waiting for NTP time sync: ");
   time_t now = time(NULL);
   while (now < 8 * 3600 * 2) {
     delay(500);
-    Serial.print(".");
+    DBG_INFO(".");
     now = time(NULL);
   }
 
@@ -389,16 +398,16 @@ void setup() {
   updateQuotes();
   updateGraph("ACN");
 
-  Serial.println("=================DONE=================");
+  DBG_DEBUG("=================DONE=================");
 }
 
 
 
 void updateQuotes()
 {
-  Serial.print("Cur page: "); Serial.println(myNex.currentPageId);
+  DBG_INFO("Cur page: %d", myNex.currentPageId);
   if(myNex.currentPageId != 0) {
-    Serial.println("Not on page0, skipping.");
+    DBG_INFO("Not on page0, skipping.");
     return;
   }
   myNex.writeStr("t7.txt","updating.");
@@ -422,11 +431,11 @@ void trigger2() {
   selectSource("WXRT Over the Air");
 }
 void trigger3() {
-  Serial.println("Vol down...");
+  DBG_INFO("Vol down...");
   mediaControl("volume_down");
 }
 void trigger4() {
-  Serial.println("Vol up...");
+  DBG_INFO("Vol up...");
   mediaControl("volume_up");
 }
 
@@ -464,7 +473,7 @@ void trigger17() {
     updateGraph("ACN");
 }
 void trigger18() {
-  Serial.println("Update the player info, if possible.");
+  DBG_DEBUG("Update the player info, if possible.");
 }
 
 unsigned long lastRefresh;
@@ -476,7 +485,7 @@ void loop() {
 
   // Do MQTT checks
   if (!client.connected()) {
-    Serial.println("reconnecting...");
+    DBG_INFO("reconnecting...");
     reconnect();
   }
   client.loop();
@@ -491,17 +500,17 @@ void loop() {
   if((millis() - lastRefresh) > 120000) {
     
     lastRefresh = millis();
-    if (!getLocalTime(&timeinfo)) Serial.println("Couldn't get local time");
+    if (!getLocalTime(&timeinfo)) DBG_ERROR("Couldn't get local time");
     
     if((timeinfo.tm_wday > 0 && timeinfo.tm_wday < 6) && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >29)) && timeinfo.tm_hour < 15))
     {
-      Serial.println("Market Open.");
+      DBG_INFO("Market Open.");
       // These functions only update page if page is active.
       updateQuotes();
       updateGraph("ACN");
      }
     else {
-      Serial.println("Market Closed.");
+      DBG_INFO("Market Closed.");
     }
   }
 
