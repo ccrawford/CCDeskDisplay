@@ -22,6 +22,13 @@
  * Supporting technology:
  * https://github.com/TroyFernandes/hass-mqtt-mediaplayer
  * 
+ * Libraries:
+ * https://github.com/107-systems/107-Arduino-Debug Debug Macros
+ * https://github.com/Seithan/EasyNextionLibrary Useful here. 
+ * https://github.com/eduardomarcos/arduino-esp32-restclient  BUT YOU HAVE TO MODIFY TO USE "CLIENT" NOT "CLIENT SECURE" in library. Should add that.
+ *  So, in RestClient.h in the library, comment out WiFiClientSecure line and make the client_s variable type WiFiClient. 
+ * https://arduinojson.org/ Massive, helpful library.
+ * https://github.com/knolleary/pubsubclient ("Arduino Client for MQTT" by Nick O'Leary)
  */
 
 
@@ -30,6 +37,7 @@
 #define DBG_ENABLE_INFO
 #define DBG_ENABLE_DEBUG
 #define DBG_ENABLE_VERBOSE
+#define ESP32_RESTCLIENT_DEBUG
 
 #include <ArduinoDebug.hpp>
 #include <WiFi.h>
@@ -45,13 +53,11 @@
 DEBUG_INSTANCE(160, Serial);
 
 
-// restClient is used to make requests from the HomeAssistant server to control the Sonos.
-RestClient restClient = RestClient("192.168.1.207", 8123);
+// restClient is used to make API requests via the HomeAssistant server to control the Sonos.
+RestClient restClient = RestClient(haServer, 8123);
 
 EasyNex myNex(Serial2);
 
-// MQTT not yet hooked up.
-const char* mqtt_server = "192.168.1.207";
 WiFiClient (espClient);
 PubSubClient client(espClient);
 
@@ -141,7 +147,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
     bufPosition[length] = 0;
     trackPosition = atoi(bufPosition);
     DBG_INFO("Position: %d", trackPosition);
-    
   }
 
    if(!strcmp(topic, "homeassistant/media_player/position_last_update")) {
@@ -239,8 +244,7 @@ void getQuote(char* symbol, String field)
   
 }
 
-void updateGraph(char * symbol)
-{
+void updateGraph(char * symbol) {
   if(myNex.currentPageId != 2) {
     DBG_INFO("Not on page2, skipping graph stuff.");
     return;
@@ -387,7 +391,7 @@ void setup() {
   setTime();    
 
   // Setup MQTT
-  client.setServer(mqtt_server, 1883);
+  client.setServer(mqttServer, 1883);
   client.setCallback(callback);
 
   myNex.writeStr("page 0");
