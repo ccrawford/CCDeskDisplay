@@ -396,16 +396,7 @@ void setup() {
   client.setCallback(callback);
 
   myNex.writeStr("page 0");
-
-//  myNex.lastCurrentPageId = 1;
-//  myNex.currentPageId = myNex.readNumber("dp");
-
-  // Update quote info
-  // updateQuotes();
-  updateGraph("ACN");
-
-  setNextionBrightness(100);
-  
+ 
   DBG_DEBUG("=================SETUP DONE=================");
 }
 
@@ -549,6 +540,9 @@ void loop() {
     // Dim the Nexion overnight. Could probably even shut it down, or tie it into the office lighting.
     if (timeinfo.tm_hour >= 23 || timeinfo.tm_hour <= 6) {
       setNextionBrightness(2);
+    }
+    else {
+      setNextionBrightness(100);  // Function will only write to device if necessary. 
     }
   }
 
