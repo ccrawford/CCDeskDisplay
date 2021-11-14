@@ -542,7 +542,7 @@ void loop() {
       setNextionBrightness(2);
     }
     else {
-      setNextionBrightness(100);  // Function will only write to device if necessary. 
+      setNextionBrightness(100);  // Function will only write to device if necessary. No need to track here. 
     }
   }
 
