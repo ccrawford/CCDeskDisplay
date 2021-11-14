@@ -36,7 +36,6 @@
 #define DBG_ENABLE_WARNING
 #define DBG_ENABLE_INFO
 #define DBG_ENABLE_DEBUG
-#define DBG_ENABLE_VERBOSE
 #define ESP32_RESTCLIENT_DEBUG
 
 #include <ArduinoDebug.hpp>
@@ -206,7 +205,7 @@ void reconnect() {
 
 
 // Update the RTC in the Nextion. Actual time dispaly handled over there. 
-void setTime()
+void setNexionTime()
 {
   time_t rawtime;
   struct tm * timeinfo;
@@ -376,7 +375,9 @@ void setup() {
   DBG_INFO("IP address: %d:%d:%d:%d", WiFi.localIP()[0],WiFi.localIP()[1],WiFi.localIP()[2],WiFi.localIP()[3]);
 
   // Set time via NTP, as required for x.509 validation
-  configTime(-5 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  setenv("TZ", "CST6CDT,M3.2.0,M11.1.0", 1);  // Chicago time zone via: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+  tzset();
 
   DBG_INFO("Waiting for NTP time sync: ");
   time_t now = time(NULL);
@@ -388,24 +389,40 @@ void setup() {
 
   struct tm timeinfo;
   gmtime_r(&now, &timeinfo);
-  setTime();    
+  setNexionTime();    
 
   // Setup MQTT
   client.setServer(mqttServer, 1883);
   client.setCallback(callback);
 
   myNex.writeStr("page 0");
+
 //  myNex.lastCurrentPageId = 1;
 //  myNex.currentPageId = myNex.readNumber("dp");
 
   // Update quote info
-  updateQuotes();
+  // updateQuotes();
   updateGraph("ACN");
 
-  DBG_DEBUG("=================DONE=================");
+  setNextionBrightness(100);
+  
+  DBG_DEBUG("=================SETUP DONE=================");
 }
 
+void setNextionBrightness(int brightness)
+{
+  static int curBrightness = -1;
+          
+  if (brightness < 0 || brightness > 100) return;
 
+  if (brightness != curBrightness) {
+    char msg[9];
+    sprintf(msg, "dim=%d", brightness);
+    myNex.writeStr(msg);
+    DBG_INFO(msg);
+    curBrightness = brightness;
+  }
+}
 
 void updateQuotes()
 {
@@ -430,6 +447,7 @@ void trigger0() {
 void trigger1() {
   restClient.setHeader(HA_TOKEN);
   int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
+  
 }
 void trigger2() {
   selectSource("WXRT Over the Air");
@@ -480,11 +498,12 @@ void trigger18() {
   DBG_DEBUG("Update the player info, if possible.");
 }
 
-unsigned long lastRefresh;
+unsigned long lastRefresh = 0;
 
 void loop() {
   
   struct tm timeinfo;
+  static int timeSetDay = -1;
   myNex.NextionListen();
 
   // Do MQTT checks
@@ -494,27 +513,42 @@ void loop() {
   }
   client.loop();
 
-  // Check player position
-  // if media state is playing and on the status page
-  // update the curent position.
-
-
-  // Refresh every two minutes when market is open.
+  // Refresh every minute when market is open.
+  // Also do basic housekeeping every minute.
  
-  if((millis() - lastRefresh) > 120000) {
+  if((millis() - lastRefresh) > 60000) {
     
     lastRefresh = millis();
     if (!getLocalTime(&timeinfo)) DBG_ERROR("Couldn't get local time");
+    DBG_VERBOSE("Current time: %d:%2d:%2d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+  //I'm using Chicago time here, but markets operate on Eastern time. 
+  // Probably a bad idea (GMT wouldn't be any better), but too much trouble to shift to Eastern.
+  // Market open 8:30am to 4pm, M-F. Don't stress about market holidays. 
     
-    if((timeinfo.tm_wday > 0 && timeinfo.tm_wday < 6) && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >29)) && timeinfo.tm_hour < 15))
+    int secondsSinceMidnight = timeinfo.tm_hour*3600 + timeinfo.tm_min*60 + timeinfo.tm_sec;
+    if((timeinfo.tm_wday >= 1 && timeinfo.tm_wday <= 5) && 
+      ((secondsSinceMidnight >= 8*3600 + 30*60) && (secondsSinceMidnight < 16*3600 + 35*60 ))) 
     {
-      DBG_INFO("Market Open.");
+      DBG_VERBOSE ("Market Open.");
       // These functions only update page if page is active.
       updateQuotes();
       updateGraph("ACN");
-     }
+    }
     else {
-      DBG_INFO("Market Closed.");
+      DBG_VERBOSE("Market Closed.");
+    }
+    
+    // Update the Nexion clock at 2am, but only one time.
+    if (timeSetDay != timeinfo.tm_mday && timeinfo.tm_hour == 2 && timeinfo.tm_min == 0 && timeinfo.tm_sec == 0) {
+      setNexionTime();
+      DBG_INFO("Updated the time on the Nexion");
+      timeSetDay = timeinfo.tm_mday; // Limit update to once per day.
+    }
+
+    // Dim the Nexion overnight. Could probably even shut it down, or tie it into the office lighting.
+    if (timeinfo.tm_hour >= 23 || timeinfo.tm_hour <= 6) {
+      setNextionBrightness(2);
     }
   }
 
