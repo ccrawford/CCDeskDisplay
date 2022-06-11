@@ -73,7 +73,7 @@ int trackPosition;
 
 // MQTT callback for media message
 void callback(char* topic, byte* payload, unsigned int length) {
-  DBG_DEBUG("In callback");
+  DBG_VERBOSE("In callback");
   
   if(myNex.currentPageId != 3) {
     DBG_INFO("Not on page3, skipping updating media player info.");
@@ -519,7 +519,7 @@ void loop() {
     
     int secondsSinceMidnight = timeinfo.tm_hour*3600 + timeinfo.tm_min*60 + timeinfo.tm_sec;
     if((timeinfo.tm_wday >= 1 && timeinfo.tm_wday <= 5) && 
-      ((secondsSinceMidnight >= 8*3600 + 30*60) && (secondsSinceMidnight < 16*3600 + 35*60 ))) 
+      ((secondsSinceMidnight >= 8*3600 + 30*60) && (secondsSinceMidnight < 15*3600 + 35*60 ))) // Market open from 8:30am to 3:30pm CST.
     {
       DBG_VERBOSE ("Market Open.");
       // These functions only update page if page is active.
