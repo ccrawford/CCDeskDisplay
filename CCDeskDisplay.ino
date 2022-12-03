@@ -73,7 +73,9 @@ int trackPosition;
 
 // MQTT callback for media message
 void callback(char* topic, byte* payload, unsigned int length) {
-  DBG_VERBOSE("In callback");
+  // DBG_VERBOSE("In callback");
+  
+  DBG_INFO("MQTT Message. Topic: [%s]", topic);
   
   if(myNex.currentPageId != 3) {
     DBG_INFO("Not on page3, skipping updating media player info.");
@@ -85,7 +87,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
  
 //  myNex.writeStr(field + ".txt", quote_msg);
   
-  DBG_INFO("Message arrived [%s]");
 
   if(!strcmp(topic, "homeassistant/media_player/volume")) {
     char bufVol[6];
@@ -188,7 +189,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
 void reconnect() {
+
+  // Make sure network is up
+  DBG_INFO("Wifi Status: %d", WiFi.status());
+  /* Value  Constant  Meaning
+0 WL_IDLE_STATUS  temporary status assigned when WiFi.begin() is called
+1 WL_NO_SSID_AVAIL   when no SSID are available
+2 WL_SCAN_COMPLETED scan networks is completed
+3 WL_CONNECTED  when connected to a WiFi network
+4 WL_CONNECT_FAILED when the connection fails for all the attempts
+5 WL_CONNECTION_LOST  when the connection is lost
+6 WL_DISCONNECTED when disconnected from a network
+*/
   // Loop until we're reconnected to the MQTT broker.
+  
   while (!client.connected()) {
     DBG_INFO("Attempting MQTT connection...");
     
@@ -196,7 +210,7 @@ void reconnect() {
       DBG_INFO("connected");
       client.subscribe("homeassistant/media_player/#");
     } else {
-      DBG_ERROR("failed to connect to MQTT, rc=%d Try again in 5 seconds");
+      DBG_INFO("failed to connect to MQTT, Try again in 5 seconds");
       // Wait 5 seconds before retrying
       delay(5000);
     }
@@ -207,6 +221,7 @@ void reconnect() {
 // Update the RTC in the Nextion. Actual time dispaly handled over there. 
 void setNexionTime()
 {
+  getNtpTime();
   time_t rawtime;
   struct tm * timeinfo;
   time(&rawtime);
@@ -350,31 +365,14 @@ void mediaControl(char* command) {
   
   char service[100];
   sprintf(service, "/api/services/media_player/%s", command);
-  
+  DBG_INFO("Call: %s",service);
   restClient.setHeader(HA_TOKEN);
   restClient.post(service, "{\"entity_id\":\"media_player.sonos_5\"}");
   
 }
 
-void setup() {
-  Serial.begin(115200);
-  // Don't "Debug" this out. I want this to print regardless. Not time sensitive and very useful when you find an old ESP lying around.
-  Serial.println(F("YahooNexionStockTicker Sep 2021"));
-
-  myNex.begin(115200);
-  
-  DBG_INFO("Connecting to %s", ssid);
-  
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    DBG_INFO(".");
-  }
-
-  DBG_INFO("IP address: %d:%d:%d:%d", WiFi.localIP()[0],WiFi.localIP()[1],WiFi.localIP()[2],WiFi.localIP()[3]);
-
-  // Set time via NTP, as required for x.509 validation
+void getNtpTime()
+{
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   setenv("TZ", "CST6CDT,M3.2.0,M11.1.0", 1);  // Chicago time zone via: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
   tzset();
@@ -386,7 +384,38 @@ void setup() {
     DBG_INFO(".");
     now = time(NULL);
   }
+}
 
+void Wifi_disconnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  Serial.println("Disconnected from WIFI access point");
+  Serial.print("WiFi lost connection. Reason: ");
+  Serial.println(info.disconnected.reason);
+  Serial.println("Reconnecting...");
+  WiFi.begin(ssid, password);
+}
+
+void setup() {
+  Serial.begin(115200);
+  // Don't "Debug" this out. I want this to print regardless. Not time sensitive and very useful when you find an old ESP lying around.
+  Serial.println(F("CCDeskDisplay.ino Sep 2021"));
+
+  myNex.begin(115200);
+  
+  DBG_INFO("Connecting to %s", ssid);
+  
+  WiFi.mode(WIFI_STA);
+  WiFi.onEvent(Wifi_disconnected, SYSTEM_EVENT_STA_DISCONNECTED); 
+  
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    DBG_INFO(".");
+  }
+
+  DBG_INFO("IP address: %d.%d.%d.%d", WiFi.localIP()[0],WiFi.localIP()[1],WiFi.localIP()[2],WiFi.localIP()[3]);
+
+  getNtpTime();
+  time_t now = time(NULL);
   struct tm timeinfo;
   gmtime_r(&now, &timeinfo);
   setNexionTime();    
@@ -489,7 +518,8 @@ void trigger18() {
   DBG_DEBUG("Update the player info, if possible.");
 }
 
-unsigned long lastRefresh = 0;
+unsigned long lastRefresh = 0, lastNtpRefresh=millis();
+
 
 void loop() {
   
@@ -532,6 +562,7 @@ void loop() {
     
     // Update the Nexion clock at 2am, but only one time.
     if (timeSetDay != timeinfo.tm_mday && timeinfo.tm_hour == 2 && timeinfo.tm_min == 0 && timeinfo.tm_sec == 0) {
+    
       setNexionTime();
       DBG_INFO("Updated the time on the Nexion");
       timeSetDay = timeinfo.tm_mday; // Limit update to once per day.
