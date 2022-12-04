@@ -517,6 +517,12 @@ void trigger17() {
 void trigger18() {
   DBG_DEBUG("Update the player info, if possible.");
 }
+void trigger19() {
+  DBG_DEBUG("In trigger 19 aka 0x13");
+  restClient.setHeader(HA_TOKEN);
+  int statusCode = restClient.post("/api/services/switch/toggle",  "{\"entity_id\":\"switch.topgreener_plug\"}");
+  
+}
 
 unsigned long lastRefresh = 0, lastNtpRefresh=millis();
 
