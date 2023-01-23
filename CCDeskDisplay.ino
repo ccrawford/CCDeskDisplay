@@ -103,7 +103,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     strncpy(track, (char *)payload, length);
     track[length] = 0;
     DBG_INFO("track: %s", track);
-    myNex.writeStr("t0.txt", track);
+    myNex.writeStr("tTrack.txt", track);
   }
   if(!strcmp(topic, "homeassistant/media_player/state")) {
     char bufState[20];
@@ -111,14 +111,16 @@ void callback(char* topic, byte* payload, unsigned int length) {
     bufState[length]=0;
     strcpy(playerState, bufState);
     DBG_INFO("State: %s", playerState);
+    // Change button to show current state icon 9 is pause icon. icon 10 is play.
+    // Pause the elapsed time ticker as well.
     if(!strcmp("playing",bufState)) {
       myNex.writeNum("tm0.en",1);
-      myNex.writeStr("vis p2,0");
-      myNex.writeStr("vis p7,1");
+      myNex.writeStr("bPlayPause.pic=9");
+      // myNex.writeStr("vis p7,1");
     } else {
       myNex.writeNum("tm0.en",0);
-      myNex.writeStr("vis p2,1");    
-      myNex.writeStr("vis p7,0");
+      myNex.writeStr("bPlayPause.pic=10");    
+      // myNex.writeStr("vis p7,0");
     }
   }
   if(!strcmp(topic, "homeassistant/media_player/artist")) {
@@ -127,7 +129,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     strncpy(artist, (char *)payload, length);
     artist[length] = 0;
     DBG_INFO("Artist: %s", artist);
-    myNex.writeStr("t1.txt", artist);
+    myNex.writeStr("tArtist.txt", artist);
   }
   if(!strcmp(topic, "homeassistant/media_player/duration")) {
     char duration[6];
@@ -227,7 +229,7 @@ void setNexionTime()
   time(&rawtime);
   timeinfo = localtime(&rawtime);
   
-  char tmStrBuf[10];
+  char tmStrBuf[24];
   sprintf(tmStrBuf,"rtc%d=%d",5,timeinfo->tm_sec);
   myNex.writeStr(tmStrBuf);
   sprintf(tmStrBuf,"rtc%d=%d",4,timeinfo->tm_min);
@@ -452,11 +454,11 @@ void updateQuotes()
     return;
   }
   myNex.writeStr("t7.txt","updating.");
-  getQuote("ACN", "t1");
+  getQuote("ACN", "tAcn");
   myNex.writeStr("t7.txt","updating .");
-  getQuote("^GSPC", "t4");        
+  getQuote("^GSPC", "tSP");        
   myNex.writeStr("t7.txt","updating  .");
-  getQuote("^IXIC", "t5");
+  getQuote("^IXIC", "tNAS");
   myNex.writeStr("t7.txt","");
 }
 
@@ -520,9 +522,12 @@ void trigger18() {
 void trigger19() {
   DBG_DEBUG("In trigger 19 aka 0x13");
   restClient.setHeader(HA_TOKEN);
-  int statusCode = restClient.post("/api/services/switch/toggle",  "{\"entity_id\":\"switch.topgreener_plug\"}");
-  
+  int statusCode = restClient.post("/api/services/switch/toggle",  "{\"entity_id\":\"switch.topgreener_plug\"}");  
 }
+void trigger20() {
+  selectSource("Release Radar");
+}
+
 
 unsigned long lastRefresh = 0, lastNtpRefresh=millis();
 
@@ -532,6 +537,11 @@ void loop() {
   struct tm timeinfo;
   static int timeSetDay = -1;
   myNex.NextionListen();
+  if(myNex.currentPageId != myNex.lastCurrentPageId) 
+  {
+    Serial.printf("Cur Page: %d\n",myNex.currentPageId);
+    myNex.lastCurrentPageId = myNex.currentPageId;
+  }
 
   // Do MQTT checks
   if (!client.connected()) {
