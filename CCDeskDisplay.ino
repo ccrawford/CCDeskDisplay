@@ -469,6 +469,7 @@ void showQuote(YahooFin* yf, String field)
   
   if(yf->isChangeInteresting())
   {
+    Serial.println("Change is interesting.");
     sprintf(quote_msg, "$%.2f($%.2f/%.2f%%)", yf->regularMarketPrice, yf->regularMarketChange, yf->regularMarketChangePercent * 100);
 
     myNex.writeStr(field + ".txt", quote_msg);
@@ -619,12 +620,13 @@ void loop() {
       DBG_VERBOSE("Market Closed.");
     }
 
-    // Update the Nexion clock at 2am, but only one time.
+    // Update the Nexion clock at 2am, but only one time. Update the quotes while we're there to remove the percent change
     if (timeSetDay != timeinfo.tm_mday && timeinfo.tm_hour == 2 && timeinfo.tm_min == 0 && timeinfo.tm_sec == 0) {
 
       setNexionTime();
       DBG_INFO("Updated the time on the Nexion");
       timeSetDay = timeinfo.tm_mday; // Limit update to once per day.
+      updateQuotes();
     }
 
     // Dim the Nexion overnight. Could probably even shut it down, or tie it into the office lighting.

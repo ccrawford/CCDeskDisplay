@@ -31,6 +31,8 @@ bool YahooFin::isChangeInteresting()
     DBG_ERROR("Couldn't get local time");
   }
 
+//  Serial.printf("Day: %d, Hour: %d, Min: %d\n",timeinfo.tm_wday, timeinfo.tm_hour, timeinfo.tm_min);
+
   //Change is only interesting during the trading day or in the evening after.
   return ((timeinfo.tm_wday > 0 && timeinfo.tm_wday < 6) 
       && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >=30))));  
