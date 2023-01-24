@@ -8,6 +8,7 @@ class YahooFin
   public:
     YahooFin(char* symbol);
     bool isMarketOpen();
+    bool isChangeInteresting();
     void getQuote();
     void getChart();
     double openPrice;

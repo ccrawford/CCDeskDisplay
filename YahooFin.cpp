@@ -10,6 +10,7 @@
 YahooFin::YahooFin(char* symbol)
 {
   _symbol = symbol;
+  regularMarketPrice = 0;
 }
 
 bool YahooFin::isMarketOpen()
@@ -23,41 +24,57 @@ bool YahooFin::isMarketOpen()
       && timeinfo.tm_hour < 15));
 }
 
+bool YahooFin::isChangeInteresting()
+{
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)){
+    DBG_ERROR("Couldn't get local time");
+  }
+
+  //Change is only interesting during the trading day or in the evening after.
+  return ((timeinfo.tm_wday > 0 && timeinfo.tm_wday < 6) 
+      && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >=30))));  
+}
+
 
 void YahooFin::getQuote(){
-  HTTPClient client;
 
-  client.useHTTP10(true);
+  if (this->isMarketOpen() || regularMarketPrice == 0)
+  {
+    HTTPClient client;
   
-  DynamicJsonDocument doc(6144);
-
-  char url[80];
-  sprintf(url, "https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=price",_symbol);
+    client.useHTTP10(true);
     
-  client.begin(url, cert_DigiCert_SHA2_High_Assurance_Server_CA);
-  int httpCode = client.GET();
-
-  if (httpCode > 0) {
-    DBG_VERBOSE(httpCode);
-    auto err = deserializeJson(doc, client.getStream());
-    if (err) {
-      Serial.println("Failed to parse response to JSON with " + String(err.c_str()));
+    DynamicJsonDocument doc(6144);
+  
+    char url[80];
+    sprintf(url, "https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=price",_symbol);
+      
+    client.begin(url, cert_DigiCert_SHA2_High_Assurance_Server_CA);
+    int httpCode = client.GET();
+  
+    if (httpCode > 0) {
+      DBG_VERBOSE(httpCode);
+      auto err = deserializeJson(doc, client.getStream());
+      if (err) {
+        Serial.println("Failed to parse response to JSON with " + String(err.c_str()));
+      }
+  
+      regularMarketPrice=doc["quoteSummary"]["result"][0]["price"]["regularMarketPrice"]["raw"].as<float>(); 
+      regularMarketDayHigh=doc["quoteSummary"]["result"][0]["price"]["regularMarketDayHigh"]["raw"].as<float>();
+      regularMarketDayLow=doc["quoteSummary"]["result"][0]["price"]["regularMarketDayLow"]["raw"].as<float>();
+      regularMarketChangePercent=doc["quoteSummary"]["result"][0]["price"]["regularMarketChangePercent"]["raw"].as<float>();
+      regularMarketChange=doc["quoteSummary"]["result"][0]["price"]["regularMarketChange"]["raw"].as<float>();
+      regularMarketPreviousClose=doc["quoteSummary"]["result"][0]["price"]["regularMarketPreviousClose"]["raw"].as<float>();
+      
     }
-
-    regularMarketPrice=doc["quoteSummary"]["result"][0]["price"]["regularMarketPrice"]["raw"].as<float>(); 
-    regularMarketDayHigh=doc["quoteSummary"]["result"][0]["price"]["regularMarketDayHigh"]["raw"].as<float>();
-    regularMarketDayLow=doc["quoteSummary"]["result"][0]["price"]["regularMarketDayLow"]["raw"].as<float>();
-    regularMarketChangePercent=doc["quoteSummary"]["result"][0]["price"]["regularMarketChangePercent"]["raw"].as<float>();
-    regularMarketChange=doc["quoteSummary"]["result"][0]["price"]["regularMarketChange"]["raw"].as<float>();
-    regularMarketPreviousClose=doc["quoteSummary"]["result"][0]["price"]["regularMarketPreviousClose"]["raw"].as<float>();
-    
+    else {
+      DBG_ERROR("Error on HTTP request");
+    }
+  
+    doc.clear();
+    client.end();
   }
-  else {
-    DBG_ERROR("Error on HTTP request");
-  }
-
-  doc.clear();
-  client.end();
 }
 
 void YahooFin::getChart(){
