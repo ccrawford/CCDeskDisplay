@@ -77,16 +77,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   DBG_INFO("MQTT Message. Topic: [%s]", topic);
 
-  if (myNex.currentPageId != 3) {
-    DBG_INFO("Not on page3, skipping updating media player info.");
-    return;
-  }
-
-  //  char quote_msg[26];
-  //  sprintf(quote_msg, "$%.2f($%.2f/%.2f%%)",yf.regularMarketPrice, yf.regularMarketChange, yf.regularMarketChangePercent*100);
-
-  //  myNex.writeStr(field + ".txt", quote_msg);
-
+//  if (myNex.currentPageId != 3) {
+//    DBG_INFO("Not on page3, skipping updating media player info.");
+//    return;
+//  }
 
   if (!strcmp(topic, "homeassistant/media_player/volume")) {
     char bufVol[6];
@@ -94,7 +88,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     bufVol[length] = 0;
     int vol = atof(bufVol) * 100;
     DBG_INFO("Volume: %d", vol);
-    myNex.writeNum("j1.val", vol);
+    myNex.writeNum("page3.j1.val", vol);
   }
 
   if (!strcmp(topic, "homeassistant/media_player/track")) {
@@ -103,7 +97,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     strncpy(track, (char *)payload, length);
     track[length] = 0;
     DBG_INFO("track: %s", track);
-    myNex.writeStr("tTrack.txt", track);
+    myNex.writeStr("page3.tTrack.txt", track);
   }
   if (!strcmp(topic, "homeassistant/media_player/state")) {
     char bufState[20];
@@ -114,12 +108,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
     // Change button to show current state icon 9 is pause icon. icon 10 is play.
     // Pause the elapsed time ticker as well.
     if (!strcmp("playing", bufState)) {
-      myNex.writeNum("tm0.en", 1);
-      myNex.writeStr("bPlayPause.pic=9");
+      myNex.writeNum("page3.tm0.en", 1);
+      myNex.writeStr("page3.bPlayPause.pic=9");
       // myNex.writeStr("vis p7,1");
     } else {
-      myNex.writeNum("tm0.en", 0);
-      myNex.writeStr("bPlayPause.pic=10");
+      myNex.writeNum("page3.tm0.en", 0);
+      myNex.writeStr("page3.bPlayPause.pic=10");
       // myNex.writeStr("vis p7,0");
     }
   }
@@ -129,7 +123,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     strncpy(artist, (char *)payload, length);
     artist[length] = 0;
     DBG_INFO("Artist: %s", artist);
-    myNex.writeStr("tArtist.txt", artist);
+    myNex.writeStr("page3.tArtist.txt", artist);
   }
   if (!strcmp(topic, "homeassistant/media_player/duration")) {
     char duration[6];
@@ -139,7 +133,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
     // We'll use that timer to update the progress. Since progress is always 0-100, we need to set the timer
     // to tick every 1% of the track. Timer is in ms. Duration in seconds. Progress bar in %. So, multiply by 1000/100=10.
-    myNex.writeNum("tm0.tim", trackDuration * 10);
+    myNex.writeNum("page3.tm0.tim", trackDuration * 10);
     DBG_INFO("Duration: %d", trackDuration);
 
   }
@@ -177,16 +171,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
     // Should also check position here...
     if (diffTime <= 1) {
       int curOffset = (int)((trackPosition * 100) / trackDuration); // Calculate what pct of track has been played.
-      myNex.writeNum("j0.val", curOffset);
+      myNex.writeNum("page3.j0.val", curOffset);
     }
 
   }
 
-  /*  for (int i = 0; i < length; i++) {
-      Serial.print((char)payload[i]);
-    }
-    Serial.println();
-  */
 }
 
 
