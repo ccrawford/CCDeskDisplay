@@ -20,7 +20,8 @@ class YahooFin
     double regularMarketPreviousClose;
     double minuteQuotes[195];
     int minuteDataPoints;
-    long lastUpdateTime;
+    time_t lastUpdateTime;
+    bool lastUpdateOfDayDone;
     
   private:
     char* _symbol;

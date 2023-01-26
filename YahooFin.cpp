@@ -11,6 +11,7 @@ YahooFin::YahooFin(char* symbol)
 {
   _symbol = symbol;
   regularMarketPrice = 0;
+  lastUpdateOfDayDone = false;
 }
 
 bool YahooFin::isMarketOpen()
@@ -41,8 +42,10 @@ bool YahooFin::isChangeInteresting()
 
 void YahooFin::getQuote(){
 
-  if (this->isMarketOpen() || regularMarketPrice == 0)
+  if (this->isMarketOpen() || regularMarketPrice == 0 || !lastUpdateOfDayDone)
   {
+    lastUpdateOfDayDone = !this->isMarketOpen();
+    
     HTTPClient client;
   
     client.useHTTP10(true);
@@ -68,7 +71,8 @@ void YahooFin::getQuote(){
       regularMarketChangePercent=doc["quoteSummary"]["result"][0]["price"]["regularMarketChangePercent"]["raw"].as<float>();
       regularMarketChange=doc["quoteSummary"]["result"][0]["price"]["regularMarketChange"]["raw"].as<float>();
       regularMarketPreviousClose=doc["quoteSummary"]["result"][0]["price"]["regularMarketPreviousClose"]["raw"].as<float>();
-      
+
+      time(&lastUpdateTime);
     }
     else {
       DBG_ERROR("Error on HTTP request");

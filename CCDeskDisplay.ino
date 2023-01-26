@@ -73,14 +73,8 @@ int trackPosition;
 
 // MQTT callback for media message
 void callback(char* topic, byte* payload, unsigned int length) {
-  // DBG_VERBOSE("In callback");
 
   DBG_INFO("MQTT Message. Topic: [%s]", topic);
-
-//  if (myNex.currentPageId != 3) {
-//    DBG_INFO("Not on page3, skipping updating media player info.");
-//    return;
-//  }
 
   if (!strcmp(topic, "homeassistant/media_player/volume")) {
     char bufVol[6];
