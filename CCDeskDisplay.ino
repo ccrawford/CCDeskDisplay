@@ -304,9 +304,9 @@ void updateGraph(char * symbol) {
 
   // Update the min/max/last overlay
 
-  delay(40); //Delay allows the transparent text to work.
+  delay(80); //Delay allows the transparent text to work.
 
-  char controlDesc[50];
+  char controlDesc[55];  //"xstr 245, 355,88,26,0,56154,0,0,1,3,123.45" about 45.
   sprintf(controlDesc, "xstr %d,%d,88,26,0,59164,0,0,1,3,\"%.2f\"", min(245, highI), 255 - high - 4, yf.regularMarketDayHigh);
   myNex.writeStr(controlDesc);
 
@@ -603,9 +603,9 @@ void loop() {
       DBG_VERBOSE("Market Closed.");
     }
 
-    // Update the Nexion clock at 2am, but only one time. Update the quotes while we're there to remove the percent change
-    if (timeSetDay != timeinfo.tm_mday && timeinfo.tm_hour == 2 && timeinfo.tm_min == 0 && timeinfo.tm_sec == 0) {
-
+    // Update the Nexion clock around 2am, but only one time! Remember: This block only runs every minute.
+    // Update the quotes while we're there to remove the percent change
+    if (timeSetDay != timeinfo.tm_mday && timeinfo.tm_hour == 2) {
       setNexionTime();
       DBG_INFO("Updated the time on the Nexion");
       timeSetDay = timeinfo.tm_mday; // Limit update to once per day.
