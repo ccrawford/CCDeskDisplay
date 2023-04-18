@@ -72,9 +72,21 @@ int trackPosition;
 
 
 // MQTT callback for media message
+// Dont' forget to subscribe in the reconnect function.
+
 void callback(char* topic, byte* payload, unsigned int length) {
 
   DBG_INFO("MQTT Message. Topic: [%s]", topic);
+  Serial.println("Callback.");
+
+  if(!strcmp(topic, "stat/OfficeHeatPlug/POWER")) {
+    char powerState[10];
+    strncpy(powerState, (char *)payload, 2); //Just grab the ON or OF
+    Serial.printf("MQTT Says: Heat Power Plug: %s\n", powerState);
+    if(powerState[1] == 'F') myNex.writeStr("page0.b2.pic=19");
+    else myNex.writeStr("page0.b2.pic=33");
+  }
+    
 
   if (!strcmp(topic, "homeassistant/media_player/volume")) {
     char bufVol[6];
@@ -194,6 +206,7 @@ void reconnect() {
     if (client.connect("DesktopBuddy", "hass.mqtt", "trixie*1", 0, 0, 0, 0, 0)) {
       DBG_INFO("connected");
       client.subscribe("homeassistant/media_player/#");
+      client.subscribe("stat/OfficeHeatPlug/POWER");
     } else {
       DBG_INFO("failed to connect to MQTT, Try again in 5 seconds");
       // Wait 5 seconds before retrying
@@ -366,9 +379,11 @@ void Wifi_disconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
 }
 
 void setup() {
+
+ 
   Serial.begin(115200);
   // Don't "Debug" this out. I want this to print regardless. Not time sensitive and very useful when you find an old ESP lying around.
-  Serial.println(F("CCDeskDisplay.ino Sep 2021"));
+  Serial.println(F("CCDeskDisplay.ino April 2023"));
 
   myNex.begin(115200);
 
@@ -392,6 +407,7 @@ void setup() {
   setNexionTime();
 
   // Setup MQTT
+  // client.setBufferSize(1024); Default size is 256.
   client.setServer(mqttServer, 1883);
   client.setCallback(callback);
 
@@ -496,7 +512,6 @@ void trigger0() {
 void trigger1() {
   restClient.setHeader(HA_TOKEN);
   int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
-
 }
 void trigger2() {
   selectSource("WXRT Over the Air");
@@ -548,8 +563,7 @@ void trigger18() {
 }
 void trigger19() {
   DBG_DEBUG("In trigger 19 aka 0x13");
-  restClient.setHeader(HA_TOKEN);
-  int statusCode = restClient.post("/api/services/switch/toggle",  "{\"entity_id\":\"switch.topgreener_plug\"}");
+  client.publish("cmnd/OfficeHeatPlug/Power", "TOGGLE");
 }
 void trigger20() {
   selectSource("Release Radar");
