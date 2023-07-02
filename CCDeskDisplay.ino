@@ -511,7 +511,10 @@ void trigger0() {
 // Turn office light on/off.
 void trigger1() {
   restClient.setHeader(HA_TOKEN);
-  int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_light\"}");
+  int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_dimmer
+  
+  
+  \"}");
 }
 void trigger2() {
   selectSource("WXRT Over the Air");
@@ -570,13 +573,10 @@ void trigger20() {
 }
 
 
-unsigned long lastRefresh = 0, lastNtpRefresh = millis();
-
+unsigned long lastRefresh = 0;
 
 void loop() {
 
-  struct tm timeinfo;
-  static int timeSetDay = -1;
   myNex.NextionListen();
   if (myNex.currentPageId != myNex.lastCurrentPageId)
   {
@@ -595,6 +595,9 @@ void loop() {
   // Also do basic housekeeping every minute.
 
   if ((millis() - lastRefresh) > 60000) {
+
+    struct tm timeinfo;
+    static int timeSetDay = -1;
 
     lastRefresh = millis();
     if (!getLocalTime(&timeinfo)) DBG_ERROR("Couldn't get local time");
