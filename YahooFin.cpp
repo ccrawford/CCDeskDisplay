@@ -40,8 +40,9 @@ bool YahooFin::isChangeInteresting()
 }
 
 
-void YahooFin::getQuote(){
-
+void YahooFin::getQuote()
+{
+  Serial.printf("Getting quote for %s. Mkt open? %d price? %f, last update done? %d\n", this->_symbol, this->isMarketOpen(), regularMarketPrice, lastUpdateOfDayDone);
   if (this->isMarketOpen() || regularMarketPrice == 0 || !lastUpdateOfDayDone)
   {
     lastUpdateOfDayDone = !this->isMarketOpen();
@@ -53,8 +54,8 @@ void YahooFin::getQuote(){
     DynamicJsonDocument doc(6144);
   
     char url[80];
-    sprintf(url, "https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=price",_symbol);
-      
+    sprintf(url, "https://query1.finance.yahoo.com/v6/finance/quoteSummary/%s?modules=price",_symbol);
+    Serial.printf("Fetching: %s\n",url);  
     client.begin(url, cert_DigiCert_SHA2_High_Assurance_Server_CA);
     int httpCode = client.GET();
   
@@ -76,6 +77,7 @@ void YahooFin::getQuote(){
     }
     else {
       DBG_ERROR("Error on HTTP request");
+      DBG_ERROR(httpCode);
     }
   
     doc.clear();

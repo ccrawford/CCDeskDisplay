@@ -188,7 +188,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 void reconnect() {
 
   // Make sure network is up
-  DBG_INFO("Wifi Status: %d", WiFi.status());
+  DBG_INFO("Wifi Status (3 is good!): %d", WiFi.status());
   /* Value  Constant  Meaning
     0 WL_IDLE_STATUS  temporary status assigned when WiFi.begin() is called
     1 WL_NO_SSID_AVAIL   when no SSID are available
@@ -224,6 +224,8 @@ void setNexionTime()
   struct tm * timeinfo;
   time(&rawtime);
   timeinfo = localtime(&rawtime);
+
+  Serial.printf("setting Nexion Time: %d:%2d:%2d\n", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
   char tmStrBuf[24];
   sprintf(tmStrBuf, "rtc%d=%d", 5, timeinfo->tm_sec);
@@ -411,7 +413,7 @@ void setup() {
   client.setServer(mqttServer, 1883);
   client.setCallback(callback);
 
-  myNex.writeStr("page 0");
+  myNex.writeStr("page 0"); 
 
   DBG_DEBUG("=================SETUP DONE=================");
 }
@@ -434,6 +436,8 @@ void setNextionBrightness(int brightness)
 
 void getQuote(char* symbol, String field)
 {
+  Serial.printf("Getting quote for %s\n", symbol);
+  
   YahooFin yf = YahooFin(symbol);
   yf.getQuote();
 
@@ -453,8 +457,9 @@ void getQuote(char* symbol, String field)
 
     myNex.writeStr(field + ".txt", quote_msg);
     myNex.writeNum(field + ".pco", 65535);
-    
   }
+  Serial.printf("Quote back: %s\n", quote_msg);
+  
 }
 
 YahooFin acn = YahooFin("ACN");
@@ -511,10 +516,7 @@ void trigger0() {
 // Turn office light on/off.
 void trigger1() {
   restClient.setHeader(HA_TOKEN);
-  int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_dimmer
-  
-  
-  \"}");
+  int statusCode = restClient.post("/api/services/light/toggle",  "{\"entity_id\":\"light.office_dimmer\"}");
 }
 void trigger2() {
   selectSource("WXRT Over the Air");
