@@ -10,6 +10,7 @@ class YahooFin
     bool isMarketOpen();
     bool isChangeInteresting();
     void getQuote();
+    void getQuoteX();
     void getChart();
     double openPrice;
     double regularMarketPrice;

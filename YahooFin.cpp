@@ -39,8 +39,71 @@ bool YahooFin::isChangeInteresting()
       && ((timeinfo.tm_hour > 8 || (timeinfo.tm_hour==8 && timeinfo.tm_min >=30))));  
 }
 
-
 void YahooFin::getQuote()
+{
+  Serial.printf("Getting quote for %s. Mkt open? %d price? %f, last update done? %d\n", this->_symbol, this->isMarketOpen(), regularMarketPrice, lastUpdateOfDayDone);
+  if (this->isMarketOpen() || regularMarketPrice == 0 || !lastUpdateOfDayDone)
+  {
+    lastUpdateOfDayDone = !this->isMarketOpen();
+    
+    HTTPClient client;
+  
+    client.useHTTP10(true);
+    
+    DynamicJsonDocument doc(8192);
+   DBG_DEBUG("Doc capacity: %d", doc.capacity());
+   
+   StaticJsonDocument<512> filter;
+   filter["chart"]["result"][0]["meta"]["regularMarketPrice"]= true;
+   filter["chart"]["result"][0]["meta"]["chartPreviousClose"]= true;
+   filter["chart"]["result"][0]["indicators"]["quote"][0]["high"][0]= true;
+   filter["chart"]["result"][0]["indicators"]["quote"][0]["low"][0]= true;
+   
+
+   char url[80];
+   sprintf(url, "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d",_symbol); 
+   client.begin(url, cert_DigiCert_SHA2_High_Assurance_Server_CA);
+   int httpCode = client.GET();
+
+   if (httpCode > 0) {
+     
+     auto err = deserializeJson(doc, client.getStream(), DeserializationOption::Filter(filter));
+     client.end();
+
+     if (err) {
+       DBG_ERROR("Failed to parse response to JSON with " + String(err.c_str()));
+     }
+
+   serializeJsonPretty(doc, Serial);
+  
+      regularMarketPrice=doc["chart"]["result"][0]["meta"]["regularMarketPrice"].as<float>(); 
+      regularMarketPreviousClose=doc["chart"]["result"][0]["meta"]["chartPreviousClose"].as<float>();
+      regularMarketDayHigh=doc["chart"]["result"][0]["indicators"]["quote"][0]["high"][0].as<float>();
+      regularMarketDayLow=doc["chart"]["result"][0]["indicators"]["quote"][0]["low"][0].as<float>();
+
+      if(regularMarketPreviousClose != 0)
+      {
+        regularMarketChangePercent= (regularMarketPrice/regularMarketPreviousClose) - 1;
+        regularMarketChange=regularMarketPrice - regularMarketPreviousClose;
+      }
+      else
+      {
+        regularMarketChangePercent = 0;
+        regularMarketChange = 0;
+      }
+
+      time(&lastUpdateTime);
+    }
+    else {
+      DBG_ERROR("Error on HTTP request");
+      DBG_ERROR(httpCode);
+    }
+    client.end();
+  }
+  
+}
+
+void YahooFin::getQuoteX()
 {
   Serial.printf("Getting quote for %s. Mkt open? %d price? %f, last update done? %d\n", this->_symbol, this->isMarketOpen(), regularMarketPrice, lastUpdateOfDayDone);
   if (this->isMarketOpen() || regularMarketPrice == 0 || !lastUpdateOfDayDone)

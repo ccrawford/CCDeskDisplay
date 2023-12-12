@@ -38,6 +38,7 @@
 #define DBG_ENABLE_DEBUG
 #define ESP32_RESTCLIENT_DEBUG
 
+#include <Arduino.h>
 #include <ArduinoDebug.hpp>
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -375,7 +376,7 @@ void getNtpTime()
 void Wifi_disconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
   Serial.println("Disconnected from WIFI access point");
   Serial.print("WiFi lost connection. Reason: ");
-  Serial.println(info.disconnected.reason);
+  // Serial.println(info.disconnected.reason);
   Serial.println("Reconnecting...");
   WiFi.begin(ssid, password);
 }
@@ -392,7 +393,7 @@ void setup() {
   DBG_INFO("Connecting to %s", ssid);
 
   WiFi.mode(WIFI_STA);
-  WiFi.onEvent(Wifi_disconnected, SYSTEM_EVENT_STA_DISCONNECTED);
+  // WiFi.onEvent(Wifi_disconnected, SYSTEM_EVENT_STA_DISCONNECTED);
 
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
