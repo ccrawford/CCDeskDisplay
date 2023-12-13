@@ -204,7 +204,7 @@ void reconnect() {
   while (!client.connected()) {
     DBG_INFO("Attempting MQTT connection...");
 
-    if (client.connect("DesktopBuddy", "hass.mqtt", "trixie*1", 0, 0, 0, 0, 0)) {
+    if (client.connect("DesktopBuddy", mqttUser, mqttPassword, 0, 0, 0, 0, 0)) {
       DBG_INFO("connected");
       client.subscribe("homeassistant/media_player/#");
       client.subscribe("stat/OfficeHeatPlug/POWER");
